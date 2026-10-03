@@ -1,0 +1,63 @@
+# Builds the app and publishes it to GitHub Pages on every push to main.
+# One-time setup (see README): Settings → Pages → Source: "GitHub Actions", and add the repository
+# variable VITE_API_URL (Settings → Secrets and variables → Actions → Variables).
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a deploy that is already running finish instead of cutting it off halfway
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        env:
+          # The backend's public https:// address. It is compiled into the public bundle — it is not a
+          # secret, and no real secret may ever be given to a VITE_* variable.
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          # A project site lives at /<repo>/; a "<user>.github.io" repository is served from the root
+          VITE_BASE: ${{ endsWith(github.event.repository.name, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::Repository variable VITE_API_URL is not set. Add your API's https:// address under Settings → Secrets and variables → Actions → Variables."
+            exit 1
+          fi
+          case "$VITE_API_URL" in https://*) ;; *) echo "::error::VITE_API_URL must start with https:// (browsers block an http:// API from an https:// page)."; exit 1;; esac
+          npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

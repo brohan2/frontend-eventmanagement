@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; }
+#root { width: 100%; }
+
+/* Make select options readable in dark mode across all browsers */
+.dark select option {
+  background-color: #27272a; /* zinc-800 */
+  color: #f4f4f5;            /* zinc-100 */
+}
