@@ -624,6 +624,7 @@ function SendAllModal({ token, event, type, onClose }) {
   const [templates, setTemplates]        = useState([]);
   const [selectedTemplate, setSelected] = useState("");
   const [filter, setFilter]              = useState("all");
+  const [sendLimit, setSendLimit]        = useState("");
   const [eventDate, setEventDate]        = useState("");
   const [job, setJob]                    = useState(null);
   const [starting, setStarting]          = useState(false);
@@ -663,7 +664,7 @@ function SendAllModal({ token, event, type, onClose }) {
     try {
       const url  = isEmail ? `${API_URL}/admin/mail/send-all` : `${API_URL}/admin/wa/send-all`;
       const body = isEmail
-        ? { templateId: selectedTemplate, filter, eventId: event.slug }
+        ? { templateId: selectedTemplate, filter, eventId: event.slug, ...(sendLimit ? { limit: parseInt(sendLimit, 10) } : {}) }
         : { waTemplateId: selectedTemplate, filter, eventId: event.slug, eventDate };
       const res  = await fetch(url, { method: "POST", headers: authHeaders(token), body: JSON.stringify(body) });
       const data = await res.json();
@@ -721,6 +722,20 @@ function SendAllModal({ token, event, type, onClose }) {
                 </div>
               </div>
               {isEmail && <AttachmentsNote files={chosen?.attachments}/>}
+              {isEmail && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1.5">
+                    Limit <span className="text-xs font-normal text-slate-400 dark:text-zinc-500">— optional, leave blank to send to all matching</span>
+                  </label>
+                  <input
+                    type="number" min="1" value={sendLimit}
+                    onChange={(e) => setSendLimit(e.target.value.replace(/\D/g, ""))}
+                    placeholder="e.g. 300"
+                    className="w-32 border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  {sendLimit && <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">Will send to first {sendLimit} matching users. Use <strong>Not sent (this template)</strong> tomorrow for the rest.</p>}
+                </div>
+              )}
               {!isEmail && chosen?.parameterKeys?.includes("eventDate") && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1.5">Event Date</label>
@@ -2245,6 +2260,31 @@ function LogsTab({ token, event }) {
             ))}
           </div>
         </div>
+        {channel === "email" && (
+          <div className="ml-auto">
+            <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">Export</label>
+            <button
+              onClick={async () => {
+                try {
+                  const params = new URLSearchParams({ eventId: event.slug });
+                  if (filterTemplate) params.set("templateId", filterTemplate);
+                  const r = await fetch(`${API_URL}/admin/mail/logs/export.csv?${params}`, { headers: authHeaders(token) });
+                  if (!r.ok) { alert("Export failed"); return; }
+                  const blob = await r.blob();
+                  const url  = URL.createObjectURL(blob);
+                  const a    = document.createElement("a");
+                  a.href     = url;
+                  a.download = `mail-status-${event.slug}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch { alert("Unable to reach server"); }
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm border border-slate-200 dark:border-zinc-700 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
+            >
+              ⬇ Download CSV
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm overflow-hidden">
