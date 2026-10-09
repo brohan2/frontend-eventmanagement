@@ -823,14 +823,22 @@ function SendTab({ token, event }) {
       .then((r) => r.json()).then((d) => setWaTemplates(d.data || []));
   }, [token, event.slug]);
 
-  // When template filter changes → fetch mail logs for that specific template
+  // When template filter changes → fetch all mail logs for that specific template (paginated)
   const fetchEmailSent = useCallback(async (tplId) => {
     if (!tplId) { setEmailSentIds(new Set()); return; }
     setEmailSentLoading(true);
     try {
-      const res  = await fetch(`${API_URL}/admin/mail/logs?eventId=${event.slug}&templateId=${tplId}&status=sent&limit=2000`, { headers: authHeaders(token) });
-      const data = await res.json();
-      setEmailSentIds(new Set((data.data || []).map((l) => l.ticketId)));
+      const ids = new Set();
+      let pg = 1, totalPages = 1;
+      do {
+        const res  = await fetch(`${API_URL}/admin/mail/logs?eventId=${event.slug}&templateId=${tplId}&status=sent&limit=100&page=${pg}`, { headers: authHeaders(token) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to load mail logs");
+        (data.data || []).forEach((l) => ids.add(l.ticketId));
+        totalPages = data.pagination?.totalPages || 1;
+        pg++;
+      } while (pg <= totalPages);
+      setEmailSentIds(ids);
     } catch { /* ignore */ }
     finally { setEmailSentLoading(false); }
   }, [token, event.slug]);
