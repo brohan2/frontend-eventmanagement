@@ -119,36 +119,39 @@ function QrScannerTab({ token, event }) {
 
   const startScanner = () => {
     setError(""); setResult(null); setActionMsg("");
+    setScanning(true); // show the div first so Html5QrcodeScanner finds it
 
-    const scanner = new Html5QrcodeScanner(
-      "qr-reader",
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-        rememberLastUsedCamera: true,
-      },
-      false
-    );
+    // Use setTimeout to let React render the visible div before initialising
+    setTimeout(() => {
+      const scanner = new Html5QrcodeScanner(
+        "qr-reader",
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+          rememberLastUsedCamera: true,
+        },
+        false
+      );
 
-    scanner.render(
-      async (decodedText) => {
-        // Stop scanning immediately after first decode
-        await scanner.clear().catch(() => {});
-        instanceRef.current = null;
-        setScanning(false);
-        await handleScan(decodedText);
-      },
-      (err) => {
-        // Ignore per-frame errors (camera looking for QR)
-        if (!err?.toString().includes("No MultiFormat")) {
-          console.debug("[QR]", err);
+      scanner.render(
+        async (decodedText) => {
+          // Stop scanning immediately after first decode
+          await scanner.clear().catch(() => {});
+          instanceRef.current = null;
+          setScanning(false);
+          await handleScan(decodedText);
+        },
+        (err) => {
+          // Ignore per-frame errors (camera looking for QR)
+          if (!err?.toString().includes("No MultiFormat")) {
+            console.debug("[QR]", err);
+          }
         }
-      }
-    );
+      );
 
-    instanceRef.current = scanner;
-    setScanning(true);
+      instanceRef.current = scanner;
+    }, 50); // 50ms is enough for React to flush the DOM update
   };
 
   const stopScanner = async () => {
@@ -253,19 +256,17 @@ function QrScannerTab({ token, event }) {
           </p>
         </div>
 
-        {/* Scanner viewport */}
-        {!result && !error && (
-          <div>
-            <div id="qr-reader" ref={scannerRef} className={scanning ? "rounded-xl overflow-hidden" : "hidden"} />
-            {!scanning && (
-              <div className="border-2 border-dashed border-slate-200 dark:border-zinc-700 rounded-xl p-10 text-center">
-                <svg className="w-12 h-12 text-slate-300 dark:text-zinc-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z"/>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 18.75h.75v.75h-.75v-.75zM18.75 13.5h.75v.75h-.75v-.75zM18.75 18.75h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z"/>
-                </svg>
-                <p className="text-sm text-slate-500 dark:text-zinc-400">Camera is off. Click Start to scan a ticket.</p>
-              </div>
-            )}
+        {/* Scanner viewport — always in DOM so Html5QrcodeScanner can always find it by id */}
+        <div id="qr-reader" ref={scannerRef} className={scanning ? "rounded-xl overflow-hidden" : "hidden"} />
+
+        {/* Placeholder shown when not scanning and no result/error */}
+        {!result && !error && !scanning && (
+          <div className="border-2 border-dashed border-slate-200 dark:border-zinc-700 rounded-xl p-10 text-center">
+            <svg className="w-12 h-12 text-slate-300 dark:text-zinc-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z"/>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 18.75h.75v.75h-.75v-.75zM18.75 13.5h.75v.75h-.75v-.75zM18.75 18.75h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z"/>
+            </svg>
+            <p className="text-sm text-slate-500 dark:text-zinc-400">Camera is off. Click Start to scan a ticket.</p>
           </div>
         )}
 
