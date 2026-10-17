@@ -119,7 +119,6 @@ function QrScannerTab({ token, event }) {
 
   const startScanner = () => {
     setError(""); setResult(null); setActionMsg("");
-    if (!scannerRef.current) return;
 
     const scanner = new Html5QrcodeScanner(
       "qr-reader",
@@ -257,7 +256,7 @@ function QrScannerTab({ token, event }) {
         {/* Scanner viewport */}
         {!result && !error && (
           <div>
-            <div id="qr-reader" className={scanning ? "rounded-xl overflow-hidden" : "hidden"} />
+            <div id="qr-reader" ref={scannerRef} className={scanning ? "rounded-xl overflow-hidden" : "hidden"} />
             {!scanning && (
               <div className="border-2 border-dashed border-slate-200 dark:border-zinc-700 rounded-xl p-10 text-center">
                 <svg className="w-12 h-12 text-slate-300 dark:text-zinc-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
