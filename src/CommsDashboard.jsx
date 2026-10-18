@@ -629,6 +629,9 @@ function SendAllModal({ token, event, type, onClose }) {
   const [job, setJob]                    = useState(null);
   const [starting, setStarting]          = useState(false);
   const [error, setError]                = useState("");
+  const [mode, setMode]                  = useState("now"); // "now" | "schedule"
+  const [scheduleAt, setScheduleAt]      = useState("");    // datetime-local value
+  const [scheduleSuccess, setScheduleSuccess] = useState(null);
   const pollRef = useRef(null);
 
   const isEmail = type === "email";
@@ -656,6 +659,26 @@ function SendAllModal({ token, event, type, onClose }) {
         if (data.job.status === "completed") clearInterval(pollRef.current);
       }
     }, 2000);
+  };
+
+  const handleSchedule = async () => {
+    if (!selectedTemplate || !scheduleAt) return;
+    setStarting(true); setError("");
+    try {
+      const sendAt = new Date(scheduleAt).toISOString();
+      const body = {
+        templateId: selectedTemplate,
+        filter,
+        eventId: event.slug,
+        sendAt,
+        ...(sendLimit ? { limit: parseInt(sendLimit, 10) } : {}),
+      };
+      const res  = await fetch(`${API_URL}/admin/mail/schedule`, { method: "POST", headers: authHeaders(token), body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) { setError(data.message || "Failed to schedule"); return; }
+      setScheduleSuccess(data.data);
+    } catch { setError("Unable to reach server"); }
+    finally { setStarting(false); }
   };
 
   const handleStart = async () => {
@@ -746,12 +769,41 @@ function SendAllModal({ token, event, type, onClose }) {
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 rounded-xl px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">
                 ⚠️ This sends to all matching attendees. Progress is tracked below.
               </div>
+              {/* Mode toggle — Send Now vs Schedule */}
+              {isEmail && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-zinc-300 mb-1.5">When to send</label>
+                  <div className="flex gap-1 bg-slate-100 dark:bg-zinc-800 rounded-xl p-1">
+                    <button onClick={() => setMode("now")} className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${mode === "now" ? "bg-white dark:bg-zinc-900 text-blue-700 shadow-sm" : "text-slate-500 dark:text-zinc-400 hover:text-slate-700"}`}>⚡ Send Now</button>
+                    <button onClick={() => setMode("schedule")} className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${mode === "schedule" ? "bg-white dark:bg-zinc-900 text-indigo-700 shadow-sm" : "text-slate-500 dark:text-zinc-400 hover:text-slate-700"}`}>🕐 Schedule</button>
+                  </div>
+                  {mode === "schedule" && (
+                    <div className="mt-2">
+                      <input
+                        type="datetime-local"
+                        value={scheduleAt}
+                        min={new Date(Date.now() + 65000).toISOString().slice(0, 16)}
+                        onChange={(e) => setScheduleAt(e.target.value)}
+                        className="w-full border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">Server runs in IST (Asia/Kolkata) — pick accordingly.</p>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex gap-3 justify-end">
                 <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-200 dark:border-zinc-700 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300">Cancel</button>
-                <button onClick={handleStart} disabled={starting || !selectedTemplate}
-                  className={`px-5 py-2 text-sm disabled:opacity-50 text-white rounded-xl flex items-center gap-2 ${isEmail ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                  {starting && <Spinner/>}{starting ? "Starting…" : "Start Bulk Send"}
-                </button>
+                {mode === "schedule" && isEmail ? (
+                  <button onClick={handleSchedule} disabled={starting || !selectedTemplate || !scheduleAt}
+                    className="px-5 py-2 text-sm disabled:opacity-50 text-white rounded-xl flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700">
+                    {starting && <Spinner/>}{starting ? "Scheduling…" : "Schedule Send"}
+                  </button>
+                ) : (
+                  <button onClick={handleStart} disabled={starting || !selectedTemplate}
+                    className={`px-5 py-2 text-sm disabled:opacity-50 text-white rounded-xl flex items-center gap-2 ${isEmail ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                    {starting && <Spinner/>}{starting ? "Starting…" : "Start Bulk Send"}
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -777,6 +829,21 @@ function SendAllModal({ token, event, type, onClose }) {
               </div>
               <p className="font-medium text-slate-700 dark:text-zinc-200">Bulk send complete</p>
               <p className="text-sm text-slate-500 dark:text-zinc-400">✓ {job.sent} sent · ✗ {job.failed} failed / {job.total} total</p>
+              <button onClick={onClose} className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm">Close</button>
+            </div>
+          )}
+          {scheduleSuccess && (
+            <div className="text-center py-4 space-y-3">
+              <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-950/40 flex items-center justify-center mx-auto">
+                <span className="text-2xl">🕐</span>
+              </div>
+              <p className="font-medium text-slate-700 dark:text-zinc-200">Send scheduled!</p>
+              <p className="text-sm text-slate-500 dark:text-zinc-400">
+                Will send to <strong>{scheduleSuccess.filter === "all" ? "all non-blocked" : scheduleSuccess.filter}</strong> attendees
+                {scheduleSuccess.limit ? ` (up to ${scheduleSuccess.limit})` : ""} at<br/>
+                <strong>{new Date(scheduleSuccess.sendAt).toLocaleString()}</strong>
+              </p>
+              <p className="text-xs text-slate-400 dark:text-zinc-500">You can cancel it from the <strong>Status</strong> tab.</p>
               <button onClick={onClose} className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm">Close</button>
             </div>
           )}
@@ -1891,6 +1958,95 @@ function WaTemplatesTab({ token, event }) {
   );
 }
 
+// ── Scheduled Jobs Section ────────────────────────────────────────────────────
+function ScheduledJobsSection({ token, event }) {
+  const [jobs, setJobs]       = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${API_URL}/admin/mail/schedule?eventId=${event.slug}`, { headers: authHeaders(token) });
+      const d = await r.json();
+      setJobs(d.data || []);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, [token, event.slug]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const cancel = async (id) => {
+    if (!confirm("Cancel this scheduled send?")) return;
+    setCancelling(id);
+    try {
+      const r = await fetch(`${API_URL}/admin/mail/schedule/${id}?eventId=${event.slug}`, { method: "DELETE", headers: authHeaders(token) });
+      const d = await r.json();
+      if (!r.ok) { alert(d.message || "Could not cancel"); return; }
+      load();
+    } catch { alert("Unable to reach server"); }
+    finally { setCancelling(null); }
+  };
+
+  const STATUS_STYLE = {
+    pending:   "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400",
+    running:   "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
+    completed: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
+    failed:    "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400",
+    cancelled: "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400",
+  };
+  const STATUS_ICON = { pending: "🕐", running: "⏳", completed: "✅", failed: "❌", cancelled: "🚫" };
+
+  const FILTER_LABEL = {
+    all: "All non-blocked", notMailedTemplate: "Not sent (this template)",
+    checkedIn: "Checked in only", notCheckedIn: "Not checked in only",
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-slate-800 dark:text-zinc-100 text-sm">🕐 Scheduled Email Sends</h3>
+        <button onClick={load} disabled={loading} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50">
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+      {jobs.length === 0 && !loading && (
+        <p className="text-sm text-slate-400 dark:text-zinc-500 py-4 text-center">No scheduled sends for this event.</p>
+      )}
+      {jobs.map((j) => (
+        <div key={j._id} className="bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl px-5 py-4 space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-sm text-slate-800 dark:text-zinc-100">{j.templateName}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[j.status] || ""}`}>
+                  {STATUS_ICON[j.status]} {j.status}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                {FILTER_LABEL[j.filter] || j.filter}{j.limit ? ` · limit ${j.limit}` : ""}
+              </p>
+            </div>
+            {j.status === "pending" && (
+              <button onClick={() => cancel(j._id)} disabled={cancelling === j._id}
+                className="shrink-0 text-xs px-3 py-1.5 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50">
+                {cancelling === j._id ? "Cancelling…" : "Cancel"}
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 dark:text-zinc-500">
+            <span>📅 Send at: <strong className="text-slate-600 dark:text-zinc-300">{new Date(j.sendAt).toLocaleString()}</strong></span>
+            {j.jobResult?.total != null && (
+              <span>✓ {j.jobResult.sent} sent · ✗ {j.jobResult.failed} failed / {j.jobResult.total} total</span>
+            )}
+            {j.errorMessage && <span className="text-red-500 dark:text-red-400">⚠ {j.errorMessage}</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Status Tab ─────────────────────────────────────────────────────────────────
 // Shows all active/recent send jobs — survives page refresh via polling /admin/jobs.
 function StatusTab({ token, event }) {
@@ -2018,6 +2174,8 @@ function StatusTab({ token, event }) {
 
   return (
     <div className="space-y-6">
+      {/* Scheduled jobs */}
+      <ScheduledJobsSection token={token} event={event} />
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div>
