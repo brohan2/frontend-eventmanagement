@@ -853,6 +853,56 @@ function SendAllModal({ token, event, type, onClose }) {
   );
 }
 
+// ── Delete User Modal ─────────────────────────────────────────────────────────
+function DeleteUserModal({ token, user, onClose, onDone }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError]       = useState("");
+
+  const handleDelete = async () => {
+    setDeleting(true); setError("");
+    try {
+      const r = await fetch(`${API_URL}/admin/users/${encodeURIComponent(user.ticketId)}`, {
+        method: "DELETE", headers: authHeaders(token),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(d.message || "Delete failed"); return; }
+      onDone();
+    } catch { setError("Unable to reach server"); }
+    finally { setDeleting(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+      <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-700 rounded-2xl shadow-xl w-full max-w-sm">
+        <div className="px-6 py-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </div>
+            <div>
+              <p className="font-semibold text-slate-800 dark:text-zinc-100">Delete attendee?</p>
+              <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">This cannot be undone.</p>
+            </div>
+          </div>
+          <div className="bg-slate-50 dark:bg-zinc-800 rounded-xl px-4 py-3 text-sm space-y-0.5">
+            <p className="font-medium text-slate-800 dark:text-zinc-100">{user.name}</p>
+            <p className="text-slate-500 dark:text-zinc-400">{user.email}</p>
+            {user.phone && <p className="text-slate-400 dark:text-zinc-500 text-xs">{user.phone}</p>}
+          </div>
+          <p className="text-xs text-slate-400 dark:text-zinc-500">Their ticket, mail logs, and WA logs will also be removed.</p>
+          {error && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 rounded-xl px-3 py-2">{error}</p>}
+          <div className="flex gap-3 justify-end pt-1">
+            <button onClick={onClose} disabled={deleting} className="px-4 py-2 text-sm border border-slate-200 dark:border-zinc-700 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 disabled:opacity-50">Cancel</button>
+            <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-xl disabled:opacity-50 flex items-center gap-2">
+              {deleting && <Spinner/>}{deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Send Tab ─────────────────────────────────────────────────────────────────
 // FIX #7: No longer fetches 2000 log entries to build sent-status sets.
 // Instead, mailSent/waSent status comes directly from each user object in the
@@ -1179,6 +1229,12 @@ function SendTab({ token, event }) {
                       <div className="flex items-center justify-end gap-1.5">
                         <button onClick={() => setModal({ type: "email",  ticketIds: [user.ticketId] })} title="Send email" className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40">✉</button>
                         <button onClick={() => setModal({ type: "wa-web", ticketIds: [user.ticketId] })} title="Send WA" className="text-xs px-2.5 py-1.5 rounded-lg border border-green-200 dark:border-green-900 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40">📱</button>
+                        <button
+                          title="Delete attendee"
+                          onClick={() => setModal({ type: "delete", user })}
+                          className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
+                          🗑
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1202,6 +1258,14 @@ function SendTab({ token, event }) {
       {modal?.type === "wa-web"         && <WaWebModal  token={token} event={event} ticketIds={modal.ticketIds} onClose={() => setModal(null)} onDone={() => { setModal(null); fetchUsers(page, search); refreshWaSent(); }}/>}
       {modal?.type === "send-all-email" && <SendAllModal token={token} event={event} type="email" onClose={() => { setModal(null); fetchUsers(page, search); fetchEmailSent(filterEmailTpl); }}/>}
       {modal?.type === "send-all-wa"    && <SendAllModal token={token} event={event} type="wa"    onClose={() => { setModal(null); fetchUsers(page, search); refreshWaSent(); }}/>}
+      {modal?.type === "delete" && (
+        <DeleteUserModal
+          token={token}
+          user={modal.user}
+          onClose={() => setModal(null)}
+          onDone={() => { setModal(null); fetchUsers(page, search); fetchEmailSent(filterEmailTpl); }}
+        />
+      )}
     </div>
   );
 }
@@ -1960,9 +2024,15 @@ function WaTemplatesTab({ token, event }) {
 
 // ── Scheduled Jobs Section ────────────────────────────────────────────────────
 function ScheduledJobsSection({ token, event }) {
-  const [jobs, setJobs]       = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [jobs, setJobs]             = useState([]);
+  const [loading, setLoading]       = useState(false);
   const [cancelling, setCancelling] = useState(null);
+  const [expanded, setExpanded]     = useState(null);   // job._id of the open exclusion panel
+  const [exSearch, setExSearch]     = useState("");
+  const [exResults, setExResults]   = useState([]);
+  const [exSearching, setExSearching] = useState(false);
+  const [exBusy, setExBusy]         = useState(null);   // ticketId being added/removed
+  const exSearchRef                 = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1986,6 +2056,37 @@ function ScheduledJobsSection({ token, event }) {
       load();
     } catch { alert("Unable to reach server"); }
     finally { setCancelling(null); }
+  };
+
+  const toggleExpand = (id) => {
+    setExpanded((prev) => (prev === id ? null : id));
+    setExSearch(""); setExResults([]);
+  };
+
+  const searchUsers = async (q) => {
+    if (!q.trim()) { setExResults([]); return; }
+    setExSearching(true);
+    try {
+      const r = await fetch(`${API_URL}/admin/users?eventId=${event.slug}&search=${encodeURIComponent(q)}&limit=10`, { headers: authHeaders(token) });
+      const d = await r.json();
+      setExResults(d.data || []);
+    } catch { /* ignore */ }
+    finally { setExSearching(false); }
+  };
+
+  const updateExclusion = async (jobId, ticketId, action) => {
+    setExBusy(ticketId);
+    try {
+      const body = action === "add" ? { add: [ticketId] } : { remove: [ticketId] };
+      const r = await fetch(`${API_URL}/admin/mail/schedule/${jobId}/exclude?eventId=${event.slug}`, {
+        method: "PATCH", headers: authHeaders(token), body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) { alert(d.message || "Failed"); return; }
+      // Update jobs in-place so the excluded list refreshes without a full reload
+      setJobs((prev) => prev.map((j) => j._id === jobId ? { ...j, excludeTicketIds: d.data.excludeTicketIds } : j));
+    } catch { alert("Unable to reach server"); }
+    finally { setExBusy(null); }
   };
 
   const STATUS_STYLE = {
@@ -2013,36 +2114,166 @@ function ScheduledJobsSection({ token, event }) {
       {jobs.length === 0 && !loading && (
         <p className="text-sm text-slate-400 dark:text-zinc-500 py-4 text-center">No scheduled sends for this event.</p>
       )}
-      {jobs.map((j) => (
-        <div key={j._id} className="bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl px-5 py-4 space-y-2">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm text-slate-800 dark:text-zinc-100">{j.templateName}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[j.status] || ""}`}>
-                  {STATUS_ICON[j.status]} {j.status}
-                </span>
+      {jobs.map((j) => {
+        const isOpen = expanded === j._id;
+        const excluded = j.excludeTicketIds || [];
+        return (
+          <div key={j._id} className="bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl overflow-hidden">
+            {/* Job header */}
+            <div className="px-5 py-4 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm text-slate-800 dark:text-zinc-100">{j.templateName}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[j.status] || ""}`}>
+                      {STATUS_ICON[j.status]} {j.status}
+                    </span>
+                    {excluded.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400">
+                        {excluded.length} excluded
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    {FILTER_LABEL[j.filter] || j.filter}{j.limit ? ` · limit ${j.limit}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {j.status === "pending" && (
+                    <>
+                      <button onClick={() => toggleExpand(j._id)}
+                        className="text-xs px-3 py-1.5 border border-slate-200 dark:border-zinc-700 rounded-lg text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800">
+                        {isOpen ? "▲ Exclusions" : "▼ Exclusions"}
+                      </button>
+                      <button onClick={() => cancel(j._id)} disabled={cancelling === j._id}
+                        className="text-xs px-3 py-1.5 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50">
+                        {cancelling === j._id ? "Cancelling…" : "Cancel"}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                {FILTER_LABEL[j.filter] || j.filter}{j.limit ? ` · limit ${j.limit}` : ""}
-              </p>
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 dark:text-zinc-500">
+                <span>📅 Send at: <strong className="text-slate-600 dark:text-zinc-300">{new Date(j.sendAt).toLocaleString()}</strong></span>
+                {j.jobResult?.total != null && (
+                  <span>✓ {j.jobResult.sent} sent · ✗ {j.jobResult.failed} failed / {j.jobResult.total} total</span>
+                )}
+                {j.errorMessage && <span className="text-red-500 dark:text-red-400">⚠ {j.errorMessage}</span>}
+              </div>
             </div>
-            {j.status === "pending" && (
-              <button onClick={() => cancel(j._id)} disabled={cancelling === j._id}
-                className="shrink-0 text-xs px-3 py-1.5 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50">
-                {cancelling === j._id ? "Cancelling…" : "Cancel"}
-              </button>
+
+            {/* Exclusion panel — only for pending jobs */}
+            {isOpen && j.status === "pending" && (
+              <div className="border-t border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/50 px-5 py-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wide">Exclude from this send</p>
+
+                {/* Search */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+                    <input
+                      ref={exSearchRef}
+                      type="text" placeholder="Search by name or email…" value={exSearch}
+                      onChange={(e) => { setExSearch(e.target.value); searchUsers(e.target.value); }}
+                      className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  {exSearching && <div className="flex items-center pr-1"><Spinner/></div>}
+                </div>
+
+                {/* Search results */}
+                {exResults.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-400 dark:text-zinc-500">Search results — click Exclude to add:</p>
+                    {exResults.map((u) => {
+                      const isExcluded = excluded.includes(u.ticketId);
+                      return (
+                        <div key={u.ticketId} className="flex items-center justify-between gap-3 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2.5 text-sm">
+                          <div className="min-w-0">
+                            <p className="font-medium text-slate-800 dark:text-zinc-100 truncate">{u.name}</p>
+                            <p className="text-xs text-slate-400 dark:text-zinc-500 truncate">{u.email}</p>
+                          </div>
+                          {isExcluded ? (
+                            <span className="text-xs text-orange-500 dark:text-orange-400 shrink-0">Already excluded</span>
+                          ) : (
+                            <button
+                              onClick={() => updateExclusion(j._id, u.ticketId, "add")}
+                              disabled={exBusy === u.ticketId}
+                              className="shrink-0 text-xs px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1.5">
+                              {exBusy === u.ticketId ? <Spinner/> : null}
+                              {exBusy === u.ticketId ? "Adding…" : "Exclude"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Current exclusion list */}
+                {excluded.length > 0 ? (
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-400 dark:text-zinc-500">Excluded ({excluded.length}) — will not receive this email:</p>
+                    <ExcludedUsersList
+                      token={token} event={event}
+                      ticketIds={excluded} busy={exBusy}
+                      onRemove={(ticketId) => updateExclusion(j._id, ticketId, "remove")}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 dark:text-zinc-500 italic">No exclusions yet. Search above to exclude specific attendees.</p>
+                )}
+              </div>
             )}
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-400 dark:text-zinc-500">
-            <span>📅 Send at: <strong className="text-slate-600 dark:text-zinc-300">{new Date(j.sendAt).toLocaleString()}</strong></span>
-            {j.jobResult?.total != null && (
-              <span>✓ {j.jobResult.sent} sent · ✗ {j.jobResult.failed} failed / {j.jobResult.total} total</span>
-            )}
-            {j.errorMessage && <span className="text-red-500 dark:text-red-400">⚠ {j.errorMessage}</span>}
+        );
+      })}
+    </div>
+  );
+}
+
+// Helper: fetches and shows names for excluded ticketIds
+function ExcludedUsersList({ token, event, ticketIds, busy, onRemove }) {
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    if (!ticketIds.length) { setUsers([]); return; }
+    // Fetch each excluded user by searching for their ticketId
+    // We batch with multiple calls since there's no bulk-by-ticketId endpoint
+    Promise.all(
+      ticketIds.map((id) =>
+        fetch(`${API_URL}/admin/checkin/${encodeURIComponent(id)}`, { headers: authHeaders(token) })
+          .then((r) => r.json()).then((d) => d.data || null).catch(() => null)
+      )
+    ).then((results) => setUsers(results.filter(Boolean)));
+  }, [token, event.slug, ticketIds.join(",")]);
+
+  return (
+    <div className="space-y-1">
+      {ticketIds.map((tid) => {
+        const u = users.find((x) => x.ticketId === tid);
+        return (
+          <div key={tid} className="flex items-center justify-between gap-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 rounded-xl px-3 py-2 text-sm">
+            <div className="min-w-0">
+              {u ? (
+                <>
+                  <p className="font-medium text-slate-800 dark:text-zinc-100 truncate">{u.name}</p>
+                  <p className="text-xs text-slate-400 dark:text-zinc-500 truncate">{u.email}</p>
+                </>
+              ) : (
+                <p className="text-xs text-slate-400 dark:text-zinc-500 font-mono truncate">{tid}</p>
+              )}
+            </div>
+            <button
+              onClick={() => onRemove(tid)}
+              disabled={busy === tid}
+              className="shrink-0 text-xs px-3 py-1.5 border border-orange-300 dark:border-orange-700 rounded-lg text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-950/40 disabled:opacity-50 flex items-center gap-1.5">
+              {busy === tid ? <Spinner/> : null}
+              {busy === tid ? "Removing…" : "Remove"}
+            </button>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
