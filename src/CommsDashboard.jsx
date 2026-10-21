@@ -889,7 +889,7 @@ function DeleteUserModal({ token, user, onClose, onDone }) {
             <p className="text-slate-500 dark:text-zinc-400">{user.email}</p>
             {user.phone && <p className="text-slate-400 dark:text-zinc-500 text-xs">{user.phone}</p>}
           </div>
-          <p className="text-xs text-slate-400 dark:text-zinc-500">Their ticket, mail logs, and WA logs will also be removed.</p>
+          <p className="text-xs text-slate-400 dark:text-zinc-500">Their ticket will be removed. Mail and WA logs will be retained for records.</p>
           {error && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 rounded-xl px-3 py-2">{error}</p>}
           <div className="flex gap-3 justify-end pt-1">
             <button onClick={onClose} disabled={deleting} className="px-4 py-2 text-sm border border-slate-200 dark:border-zinc-700 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 disabled:opacity-50">Cancel</button>
