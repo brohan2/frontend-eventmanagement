@@ -1054,6 +1054,7 @@ function SendTab({ token, event }) {
     if (filter === "waSent")       return wSent;
     if (filter === "waNotSent")    return !wSent;
     if (filter === "neither")      return !eSent && !wSent;
+    if (filter === "blocked")      return u.blocked;
     return true;
   });
 
@@ -1076,6 +1077,7 @@ function SendTab({ token, event }) {
     { key: "waSent",       label: "WA sent" },
     { key: "waNotSent",    label: "WA not sent" },
     { key: "neither",      label: "Neither sent" },
+    { key: "blocked",      label: "🚫 Blocked" },
   ];
 
   return (
