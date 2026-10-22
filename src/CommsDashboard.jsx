@@ -853,22 +853,25 @@ function SendAllModal({ token, event, type, onClose }) {
   );
 }
 
-// ── Delete User Modal ─────────────────────────────────────────────────────────
-function DeleteUserModal({ token, user, onClose, onDone }) {
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError]       = useState("");
+// ── Block User Modal ──────────────────────────────────────────────────────────
+function BlockUserModal({ token, user, onClose, onDone }) {
+  const [busy, setBusy]   = useState(false);
+  const [error, setError] = useState("");
+  const isBlocked = user.blocked;
 
-  const handleDelete = async () => {
-    setDeleting(true); setError("");
+  const handleToggle = async () => {
+    setBusy(true); setError("");
     try {
-      const r = await fetch(`${API_URL}/admin/users/${encodeURIComponent(user.ticketId)}`, {
-        method: "DELETE", headers: authHeaders(token),
+      const r = await fetch(`${API_URL}/admin/block`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ ticketId: user.ticketId, blocked: !isBlocked }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) { setError(d.message || "Delete failed"); return; }
+      if (!r.ok) { setError(d.message || "Action failed"); return; }
       onDone();
     } catch { setError("Unable to reach server"); }
-    finally { setDeleting(false); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -876,12 +879,16 @@ function DeleteUserModal({ token, user, onClose, onDone }) {
       <div className="bg-white dark:bg-zinc-900 border dark:border-zinc-700 rounded-2xl shadow-xl w-full max-w-sm">
         <div className="px-6 py-5 space-y-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isBlocked ? "bg-amber-100 dark:bg-amber-950/40" : "bg-red-100 dark:bg-red-950/40"}`}>
+              {isBlocked
+                ? <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                : <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>}
             </div>
             <div>
-              <p className="font-semibold text-slate-800 dark:text-zinc-100">Delete attendee?</p>
-              <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">This cannot be undone.</p>
+              <p className="font-semibold text-slate-800 dark:text-zinc-100">{isBlocked ? "Unblock attendee?" : "Block attendee?"}</p>
+              <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
+                {isBlocked ? "They will receive future emails and can check in again." : "They will be excluded from all future emails and check-in."}
+              </p>
             </div>
           </div>
           <div className="bg-slate-50 dark:bg-zinc-800 rounded-xl px-4 py-3 text-sm space-y-0.5">
@@ -889,12 +896,17 @@ function DeleteUserModal({ token, user, onClose, onDone }) {
             <p className="text-slate-500 dark:text-zinc-400">{user.email}</p>
             {user.phone && <p className="text-slate-400 dark:text-zinc-500 text-xs">{user.phone}</p>}
           </div>
-          <p className="text-xs text-slate-400 dark:text-zinc-500">Their ticket will be removed. Mail and WA logs will be retained for records.</p>
+          {!isBlocked && (
+            <p className="text-xs text-slate-400 dark:text-zinc-500">
+              Blocked users are skipped by all bulk sends and scheduled emails. Their history is preserved and they can be unblocked anytime.
+            </p>
+          )}
           {error && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 rounded-xl px-3 py-2">{error}</p>}
           <div className="flex gap-3 justify-end pt-1">
-            <button onClick={onClose} disabled={deleting} className="px-4 py-2 text-sm border border-slate-200 dark:border-zinc-700 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 disabled:opacity-50">Cancel</button>
-            <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-xl disabled:opacity-50 flex items-center gap-2">
-              {deleting && <Spinner/>}{deleting ? "Deleting…" : "Delete"}
+            <button onClick={onClose} disabled={busy} className="px-4 py-2 text-sm border border-slate-200 dark:border-zinc-700 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 disabled:opacity-50">Cancel</button>
+            <button onClick={handleToggle} disabled={busy}
+              className={`px-4 py-2 text-sm text-white rounded-xl disabled:opacity-50 flex items-center gap-2 ${isBlocked ? "bg-amber-500 hover:bg-amber-600" : "bg-red-600 hover:bg-red-700"}`}>
+              {busy && <Spinner/>}{busy ? (isBlocked ? "Unblocking…" : "Blocking…") : (isBlocked ? "Unblock" : "Block")}
             </button>
           </div>
         </div>
@@ -1203,9 +1215,12 @@ function SendTab({ token, event }) {
                 const emailSent = filterEmailTpl ? emailSentIds.has(user.ticketId) : user.mailSent;
                 const waSent    = waSentIds.has(user.ticketId);
                 return (
-                  <tr key={user.ticketId} className={`hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors ${selected.has(user.ticketId) ? "bg-indigo-50/40 dark:bg-indigo-950/20" : ""}`}>
+                  <tr key={user.ticketId} className={`hover:bg-slate-50 dark:hover:bg-zinc-800/50 transition-colors ${selected.has(user.ticketId) ? "bg-indigo-50/40 dark:bg-indigo-950/20" : ""} ${user.blocked ? "opacity-60" : ""}`}>
                     <td className="px-4 py-3.5"><input type="checkbox" checked={selected.has(user.ticketId)} onChange={() => toggleSelect(user.ticketId)} className="rounded"/></td>
-                    <td className="px-4 py-3.5 font-medium text-slate-800 dark:text-zinc-100 whitespace-nowrap">{user.name}</td>
+                    <td className="px-4 py-3.5 font-medium text-slate-800 dark:text-zinc-100 whitespace-nowrap">
+                      <span>{user.name}</span>
+                      {user.blocked && <span className="ml-2 px-1.5 py-0.5 rounded text-xs bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-medium">Blocked</span>}
+                    </td>
                     <td className="px-4 py-3.5 text-slate-500 dark:text-zinc-400 whitespace-nowrap">{user.email}</td>
                     <td className="px-4 py-3.5 text-slate-500 dark:text-zinc-400 whitespace-nowrap hidden sm:table-cell">{user.phone}</td>
                     <td className="px-4 py-3.5 text-slate-500 dark:text-zinc-400 whitespace-nowrap hidden md:table-cell">{user.location || "—"}</td>
@@ -1227,13 +1242,13 @@ function SendTab({ token, event }) {
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        <button onClick={() => setModal({ type: "email",  ticketIds: [user.ticketId] })} title="Send email" className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40">✉</button>
-                        <button onClick={() => setModal({ type: "wa-web", ticketIds: [user.ticketId] })} title="Send WA" className="text-xs px-2.5 py-1.5 rounded-lg border border-green-200 dark:border-green-900 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40">📱</button>
+                        <button onClick={() => setModal({ type: "email",  ticketIds: [user.ticketId] })} title="Send email" disabled={user.blocked} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-30 disabled:cursor-not-allowed">✉</button>
+                        <button onClick={() => setModal({ type: "wa-web", ticketIds: [user.ticketId] })} title="Send WA"    disabled={user.blocked} className="text-xs px-2.5 py-1.5 rounded-lg border border-green-200 dark:border-green-900 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40 disabled:opacity-30 disabled:cursor-not-allowed">📱</button>
                         <button
-                          title="Delete attendee"
-                          onClick={() => setModal({ type: "delete", user })}
-                          className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
-                          🗑
+                          title={user.blocked ? "Unblock attendee" : "Block attendee"}
+                          onClick={() => setModal({ type: "block", user })}
+                          className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${user.blocked ? "border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40" : "border-red-200 dark:border-red-900 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"}`}>
+                          {user.blocked ? "🔓" : "🚫"}
                         </button>
                       </div>
                     </td>
@@ -1258,12 +1273,12 @@ function SendTab({ token, event }) {
       {modal?.type === "wa-web"         && <WaWebModal  token={token} event={event} ticketIds={modal.ticketIds} onClose={() => setModal(null)} onDone={() => { setModal(null); fetchUsers(page, search); refreshWaSent(); }}/>}
       {modal?.type === "send-all-email" && <SendAllModal token={token} event={event} type="email" onClose={() => { setModal(null); fetchUsers(page, search); fetchEmailSent(filterEmailTpl); }}/>}
       {modal?.type === "send-all-wa"    && <SendAllModal token={token} event={event} type="wa"    onClose={() => { setModal(null); fetchUsers(page, search); refreshWaSent(); }}/>}
-      {modal?.type === "delete" && (
-        <DeleteUserModal
+      {modal?.type === "block" && (
+        <BlockUserModal
           token={token}
           user={modal.user}
           onClose={() => setModal(null)}
-          onDone={() => { setModal(null); fetchUsers(page, search); fetchEmailSent(filterEmailTpl); }}
+          onDone={() => { setModal(null); fetchUsers(page, search); }}
         />
       )}
     </div>
