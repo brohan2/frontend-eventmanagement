@@ -1617,6 +1617,12 @@ function ImportTab({ token, event }) {
   const [result, setResult]   = useState(null);
   const [error, setError]     = useState("");
 
+  // Manual add form
+  const [manualForm, setManualForm] = useState({ name: "", email: "", phone: "", location: "" });
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualResult, setManualResult]   = useState(null);
+  const [manualError, setManualError]     = useState("");
+
   const handleUpload = async () => {
     if (!file) return;
     setLoading(true); setResult(null); setError("");
@@ -1632,8 +1638,34 @@ function ImportTab({ token, event }) {
     finally { setLoading(false); }
   };
 
+  const handleManualAdd = async () => {
+    const { name, email, phone, location } = manualForm;
+    if (!name.trim() || !email.trim()) { setManualError("Name and email are required"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setManualError("Enter a valid email address"); return; }
+    setManualLoading(true); setManualResult(null); setManualError("");
+    try {
+      // Build a minimal CSV and POST to the import endpoint
+      const csv  = `Name,Email Address,Phone Number,Location\n"${name.trim()}","${email.trim().toLowerCase()}","${phone.trim()}","${location.trim()}"`;
+      const blob = new Blob([csv], { type: "text/csv" });
+      const form = new FormData();
+      form.append("file", blob, "manual.csv");
+      const res  = await fetch(`${API_URL}/admin/import?eventId=${encodeURIComponent(event.slug)}`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+      const data = await res.json();
+      if (!res.ok) { setManualError(data.message || "Add failed"); return; }
+      if (data.data?.inserted === 0) {
+        setManualError("Not added — this email is already registered for this event.");
+        return;
+      }
+      setManualResult(`${name.trim()} added successfully.`);
+      setManualForm({ name: "", email: "", phone: "", location: "" });
+    } catch { setManualError("Unable to reach server"); }
+    finally { setManualLoading(false); }
+  };
+
   return (
-    <div className="max-w-xl">
+    <div className="max-w-xl space-y-5">
+      {/* CSV Upload */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm p-6 space-y-4">
         <h3 className="font-semibold text-slate-800 dark:text-zinc-100">Upload CSV File</h3>
         <div className="text-sm text-slate-500 dark:text-zinc-400 space-y-1">
@@ -1661,6 +1693,45 @@ function ImportTab({ token, event }) {
         <button onClick={handleUpload} disabled={!file || loading}
           className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-sm font-medium rounded-xl py-2.5 flex items-center justify-center gap-2">
           {loading && <Spinner/>}{loading ? "Importing…" : "Import CSV"}
+        </button>
+      </div>
+
+      {/* Manual Add */}
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 shadow-sm p-6 space-y-4">
+        <h3 className="font-semibold text-slate-800 dark:text-zinc-100">Add Attendee Manually</h3>
+        <div className="grid grid-cols-1 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1">Name <span className="text-red-500">*</span></label>
+            <input type="text" value={manualForm.name} onChange={(e) => setManualForm((p) => ({ ...p, name: e.target.value }))}
+              placeholder="Full name"
+              className="w-full border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"/>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1">Email <span className="text-red-500">*</span></label>
+            <input type="email" value={manualForm.email} onChange={(e) => setManualForm((p) => ({ ...p, email: e.target.value }))}
+              placeholder="email@example.com"
+              className="w-full border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"/>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1">Phone</label>
+              <input type="text" value={manualForm.phone} onChange={(e) => setManualForm((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="9000000000"
+                className="w-full border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1">Location</label>
+              <input type="text" value={manualForm.location} onChange={(e) => setManualForm((p) => ({ ...p, location: e.target.value }))}
+                placeholder="City"
+                className="w-full border border-slate-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+          </div>
+        </div>
+        {manualError  && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 rounded-xl px-4 py-2">{manualError}</p>}
+        {manualResult && <p className="text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl px-4 py-2">✅ {manualResult}</p>}
+        <button onClick={handleManualAdd} disabled={manualLoading}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl py-2.5 flex items-center justify-center gap-2">
+          {manualLoading && <Spinner/>}{manualLoading ? "Adding…" : "Add Attendee"}
         </button>
       </div>
     </div>
@@ -2586,10 +2657,12 @@ function LogsTab({ token, event }) {
   const [channel, setChannel]               = useState("email");
   const [filterTemplate, setFilterTemplate] = useState("");
   const [filterStatus, setFilterStatus]     = useState("");
+  const [search, setSearch]                 = useState("");
   const [logs, setLogs]                     = useState([]);
   const [loading, setLoading]               = useState(false);
   const [page, setPage]                     = useState(1);
   const [pagination, setPagination]         = useState({ total: 0, totalPages: 1 });
+  const searchTimeout                       = useRef(null);
 
   useEffect(() => {
     fetch(`${API_URL}/admin/mail/templates?eventId=${event.slug}`, { headers: authHeaders(token) }).then((r) => r.json()).then((d) => setEmailTemplates(d.data || []));
@@ -2604,16 +2677,25 @@ function LogsTab({ token, event }) {
       if (filterTemplate) params.set(channel === "email" ? "templateId" : "waTemplateId", filterTemplate);
       if (filterStatus)   params.set("status", filterStatus);
       if (channel === "wa" && filterAccount) params.set("accountId", filterAccount);
+      if (search)         params.set(channel === "email" ? "email" : "phone", search);
       const endpoint = channel === "email" ? "mail/logs" : "wa/logs";
       const r        = await fetch(`${API_URL}/admin/${endpoint}?${params}`, { headers: authHeaders(token) });
       const d        = await r.json();
       setLogs(d.data || []);
       setPagination(d.pagination || { total: 0, totalPages: 1 });
     } catch { /* ignore */ } finally { setLoading(false); }
-  }, [token, event.slug, channel, filterTemplate, filterStatus, filterAccount]);
+  }, [token, event.slug, channel, filterTemplate, filterStatus, filterAccount, search]);
 
-  useEffect(() => { setPage(1); load(1); }, [channel, filterTemplate, filterStatus, filterAccount]);
+  useEffect(() => { setPage(1); load(1); }, [channel, filterTemplate, filterStatus, filterAccount, search]);
   useEffect(() => { load(page); }, [page]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearch(val);
+    setPage(1);
+    clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => load(1), 350);
+  };
 
   const tplList     = channel === "email" ? emailTemplates : waTemplates;
   const tplLabelKey = channel === "email" ? "name" : "displayName";
@@ -2657,10 +2739,20 @@ function LogsTab({ token, event }) {
             ))}
           </div>
         </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">Search</label>
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+            <input
+              type="text" value={search} onChange={handleSearchChange}
+              placeholder={channel === "email" ? "Search email…" : "Search phone…"}
+              className="pl-9 pr-4 py-2.5 text-sm border border-slate-200 dark:border-zinc-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 w-48"
+            />
+          </div>
+        </div>
         {channel === "email" && (
           <div className="ml-auto">
-            <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">Export</label>
-            <button
+            <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 uppercase tracking-wide mb-1.5">Export</label>            <button
               onClick={async () => {
                 try {
                   const params = new URLSearchParams({ eventId: event.slug });
